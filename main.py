@@ -1,6 +1,7 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import pandas as pd
 
 # Configurações de ambiente
 load_dotenv()
@@ -19,8 +20,8 @@ focando na área de inteligência artificial. Sua função é a partir de uma de
 requisitos mais importantes para que um candidato seja considerado apto para aquela vaga.
 Você deve extrair os requisitos técnicos mais relevantes e listá-los da seguinte forma, em um json estruturado:
 {"requisitos": [
-    {"requisito": "Requisito 1", "importancia": "Alta"},
-    {"requisito": "Requisito 2", "importancia": "Média"},
+    {"requisito": "RAG", "importancia": "Alta"},
+    {"requisito": "System Design", "importancia": "Média"},
     ...
 }.
 Você deve classificar a importância de cada requisito como "Alta", "Média" ou "Baixa", com base na frequência e ênfase dada a eles na descrição da vaga.
@@ -32,17 +33,54 @@ def get_user_prompt(nome_vaga, job_description):
     Aqui está a descrição de uma vaga de emprego para {nome_vaga}: {job_description}
     """
 
-def main():
-    
-    response = client.chat.completions.create(
+def run_analysis(df):
+    respostas = []
+    for index, row in df.iterrows():
+        message = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role":"system","content":system_prompt},
+                {"role":"user","content":get_user_prompt(row['Posicao'], row['Descricao'])}
+            ]
+        )
+        resposta = message.choices[0].message.content
+        respostas.append(resposta)
+        #print(f"Requisitos para a vaga {row['Posicao']}: {resposta}")
+        return respostas
+
+def summarize_requirements(requirements):
+
+    system_prompt = """
+        Você é um especialista em análise de dados e tem a tarefa de analisar uma lista de requisitos técnicos extraídos 
+        de várias descrições de vagas de emprego na área de inteligência artificial. Seu objetivo é identificar quais são os 
+        requisitos mais comuns e relevantes para os candidatos que buscam oportunidades nessa área.
+    """
+
+    user_prompt = f"""
+        Aqui estão os requisitos técnicos extraídos de várias descrições de vagas de emprego na área de inteligência artificial: 
+        {requirements}
+    """
+    message = client.chat.completions.create(
         model=MODEL,
         messages=[
             {"role":"system","content":system_prompt},
-            {"role":"user","content":get_user_prompt("Senior AI Engineer, Enterprise AI", texto)}
+            {"role":"user","content":user_prompt}
         ]
     )
+    resposta = message.choices[0].message.content
 
-    print(response.choices[0].message.content)
+    return resposta
+
+def main():
+    
+    df = pd.read_csv("vagas.csv", delimiter=";")
+    
+    requisitos = run_analysis(df)
+
+    resultado = summarize_requirements(requisitos)
+
+    with open("requisitos_sintetizados.md", "w") as f:
+        f.write(resultado)
 
 
 if __name__ == "__main__":
